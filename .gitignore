@@ -1,0 +1,12 @@
+# frontend
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+
+# 系统
+.DS_Store
+*.log
+
+# IDE
+.idea/
+.vscode/

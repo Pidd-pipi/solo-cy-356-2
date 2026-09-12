@@ -1,0 +1,64 @@
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  background: #f5f7fa;
+}
+.page-card {
+  margin: 16px;
+}
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0 0 16px;
+}
+.muted {
+  color: #909399;
+  font-size: 13px;
+}
+.stat-card {
+  border-radius: 8px;
+  padding: 16px 20px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  color: #409eff;
+}
+.stat-label {
+  color: #909399;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.bar-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.bar-label {
+  width: 90px;
+  color: #606266;
+  font-size: 13px;
+}
+.bar-track {
+  flex: 1;
+  height: 14px;
+  background: #f0f2f5;
+  border-radius: 7px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #67c23a, #409eff);
+}
+.bar-value {
+  width: 90px;
+  text-align: right;
+  color: #606266;
+  font-size: 13px;
+}

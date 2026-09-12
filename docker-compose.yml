@@ -1,0 +1,81 @@
+name: communitygarden
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-communitygarden}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-communitygarden_db}
+      POSTGRES_USER: ${DB_USER:-communitygarden_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-communitygarden_pwd}
+    ports:
+      - "${DB_PORT:-44001}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-communitygarden_user} -d ${DB_NAME:-communitygarden_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-communitygarden}-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-46301}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    container_name: ${COMPOSE_PROJECT_NAME:-communitygarden}-backend
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: "8080"
+      RUN_MODE: "release"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-communitygarden_db}
+      DB_USER: ${DB_USER:-communitygarden_user}
+      DB_PASSWORD: ${DB_PASSWORD:-communitygarden_pwd}
+      DB_SSLMODE: "disable"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      JWT_SECRET: ${JWT_SECRET:-change_me_to_a_long_random_string}
+      JWT_EXPIRE_HOURS: "72"
+    ports:
+      - "${BACKEND_PORT:-29516}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  frontend:
+    build: ./frontend
+    container_name: ${COMPOSE_PROJECT_NAME:-communitygarden}-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-28516}:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
+  redis_data:

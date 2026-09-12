@@ -1,0 +1,220 @@
+openapi: 3.0.3
+info:
+  title: 城市共享菜园管理平台 API
+  description: 面向城市居民与农场主的菜园认养、种植管理与农友社交平台后端接口文档。
+  version: 1.0.0
+servers:
+  - url: http://localhost:29516/api/v1
+tags:
+  - name: auth
+  - name: plots
+  - name: planting-plans
+  - name: harvests
+  - name: diaries
+  - name: community-posts
+  - name: users
+  - name: audit-logs
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: 注册
+      responses: { '200': { description: 成功 } }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: 登录获取 JWT
+      responses: { '200': { description: 成功 } }
+  /plots:
+    get:
+      tags: [plots]
+      summary: 地块列表（公开）
+      responses: { '200': { description: 成功 } }
+    post:
+      tags: [plots]
+      summary: 创建地块（管理员）
+      responses: { '200': { description: 成功 } }
+  /plots/{id}:
+    get:
+      tags: [plots]
+      summary: 地块详情
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 成功 } }
+    put:
+      tags: [plots]
+      summary: 更新地块（管理员）
+      responses: { '200': { description: 成功 } }
+  /plots/{id}/adopt:
+    post:
+      tags: [plots]
+      summary: 认养地块
+      responses: { '200': { description: 成功 } }
+  /plots/{id}/release:
+    post:
+      tags: [plots]
+      summary: 释放地块
+      responses: { '200': { description: 成功 } }
+  /planting-plans:
+    get:
+      tags: [planting-plans]
+      summary: 种植计划列表
+      responses: { '200': { description: 成功 } }
+    post:
+      tags: [planting-plans]
+      summary: 创建种植计划
+      responses: { '200': { description: 成功 } }
+  /planting-plans/{id}:
+    get:
+      tags: [planting-plans]
+      summary: 种植计划详情
+      responses: { '200': { description: 成功 } }
+    put:
+      tags: [planting-plans]
+      summary: 更新种植计划
+      responses: { '200': { description: 成功 } }
+  /planting-plans/{id}/status:
+    post:
+      tags: [planting-plans]
+      summary: 种植计划状态流转
+      responses: { '200': { description: 成功 } }
+  /crops/recommendations:
+    get:
+      tags: [planting-plans]
+      summary: 季节作物推荐
+      responses: { '200': { description: 成功 } }
+  /reminders/harvest:
+    get:
+      tags: [planting-plans]
+      summary: 采摘提醒
+      responses: { '200': { description: 成功 } }
+  /harvests:
+    get:
+      tags: [harvests]
+      summary: 收成记录列表
+      responses: { '200': { description: 成功 } }
+    post:
+      tags: [harvests]
+      summary: 记录收成
+      responses: { '200': { description: 成功 } }
+  /harvests/{id}:
+    put:
+      tags: [harvests]
+      summary: 更新收成记录
+      responses: { '200': { description: 成功 } }
+    delete:
+      tags: [harvests]
+      summary: 删除收成记录
+      responses: { '200': { description: 成功 } }
+  /stats/annual:
+    get:
+      tags: [harvests]
+      summary: 年度收成统计
+      responses: { '200': { description: 成功 } }
+  /diaries:
+    get:
+      tags: [diaries]
+      summary: 种植日记列表
+      responses: { '200': { description: 成功 } }
+    post:
+      tags: [diaries]
+      summary: 发布种植日记
+      responses: { '200': { description: 成功 } }
+  /diaries/{id}:
+    get:
+      tags: [diaries]
+      summary: 日记详情（含评论）
+      responses: { '200': { description: 成功 } }
+    put:
+      tags: [diaries]
+      summary: 更新日记
+      responses: { '200': { description: 成功 } }
+    delete:
+      tags: [diaries]
+      summary: 删除日记
+      responses: { '200': { description: 成功 } }
+  /diaries/{id}/like:
+    post:
+      tags: [diaries]
+      summary: 点赞日记
+      responses: { '200': { description: 成功 } }
+  /diaries/{id}/comments:
+    post:
+      tags: [diaries]
+      summary: 评论日记
+      responses: { '200': { description: 成功 } }
+  /community-posts:
+    get:
+      tags: [community-posts]
+      summary: 社区帖子列表
+      responses: { '200': { description: 成功 } }
+    post:
+      tags: [community-posts]
+      summary: 发布帖子
+      responses: { '200': { description: 成功 } }
+  /community-posts/{id}:
+    get:
+      tags: [community-posts]
+      summary: 帖子详情（含评论）
+      responses: { '200': { description: 成功 } }
+    put:
+      tags: [community-posts]
+      summary: 更新帖子
+      responses: { '200': { description: 成功 } }
+    delete:
+      tags: [community-posts]
+      summary: 删除帖子
+      responses: { '200': { description: 成功 } }
+  /community-posts/{id}/like:
+    post:
+      tags: [community-posts]
+      summary: 点赞帖子
+      responses: { '200': { description: 成功 } }
+  /community-posts/{id}/comments:
+    post:
+      tags: [community-posts]
+      summary: 评论帖子
+      responses: { '200': { description: 成功 } }
+  /users:
+    get:
+      tags: [users]
+      summary: 用户列表（管理员）
+      responses: { '200': { description: 成功 } }
+  /users/{id}:
+    get:
+      tags: [users]
+      summary: 用户详情
+      responses: { '200': { description: 成功 } }
+  /users/{id}/role:
+    put:
+      tags: [users]
+      summary: 变更角色（管理员）
+      responses: { '200': { description: 成功 } }
+  /users/{id}/status:
+    put:
+      tags: [users]
+      summary: 变更状态（管理员）
+      responses: { '200': { description: 成功 } }
+  /me:
+    get:
+      tags: [users]
+      summary: 当前用户
+      responses: { '200': { description: 成功 } }
+    put:
+      tags: [users]
+      summary: 更新当前用户
+      responses: { '200': { description: 成功 } }
+  /dashboard/stats:
+    get:
+      tags: [users]
+      summary: 平台概览统计
+      responses: { '200': { description: 成功 } }
+  /audit-logs:
+    get:
+      tags: [audit-logs]
+      summary: 审计日志（管理员）
+      responses: { '200': { description: 成功 } }
+  /ws/community:
+    get:
+      tags: [audit-logs]
+      summary: 社区实时消息 WebSocket
+      responses: { '200': { description: 成功 } }

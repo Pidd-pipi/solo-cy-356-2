@@ -1,0 +1,2 @@
+-- 迁移脚本：与 database/init.sql 保持一致（GORM AutoMigrate 为运行时权威 schema）。
+-- 部署时数据库初始化由 docker-compose 挂载的 database/init.sql 完成。
