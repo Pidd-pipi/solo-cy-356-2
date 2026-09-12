@@ -8,6 +8,7 @@ servers:
 tags:
   - name: auth
   - name: plots
+  - name: applications
   - name: planting-plans
   - name: harvests
   - name: diaries
@@ -52,8 +53,55 @@ paths:
   /plots/{id}/release:
     post:
       tags: [plots]
-      summary: 释放地块
+      summary: 释放地块（释放后最早候补申请自动转为待审核）
       responses: { '200': { description: 成功 } }
+  /applications:
+    get:
+      tags: [applications]
+      summary: 认养申请列表（管理员，?status= 过滤）
+      parameters: [{ name: status, in: query, required: false, schema: { type: string, enum: [pending, waitlisted, approved, rejected, withdrawn] } }]
+      responses: { '200': { description: 成功 } }
+    post:
+      tags: [applications]
+      summary: 提交认养申请（同一用户仅允许一份进行中申请；地块已有待审申请时进入候补队列）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plot_id]
+              properties:
+                plot_id: { type: integer }
+                reason: { type: string, maxLength: 512 }
+      responses: { '200': { description: 成功 }, '409': { description: 已有进行中申请或地块不可申请 } }
+  /applications/mine:
+    get:
+      tags: [applications]
+      summary: 我的认养申请列表（进度查询）
+      responses: { '200': { description: 成功 } }
+  /applications/{id}/withdraw:
+    post:
+      tags: [applications]
+      summary: 撤回认养申请（本人或管理员；撤回待审申请后最早候补自动晋升）
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 成功 } }
+  /applications/{id}/review:
+    post:
+      tags: [applications]
+      summary: 审核认养申请（管理员；通过则同事务同步地块认养状态，驳回则晋升最早候补）
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, reject] }
+                note: { type: string, maxLength: 512 }
+      responses: { '200': { description: 成功 }, '409': { description: 申请非待审核状态或地块不可认养 } }
   /planting-plans:
     get:
       tags: [planting-plans]

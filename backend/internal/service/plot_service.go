@@ -14,16 +14,23 @@ import (
 	"github.com/communitygarden/server/internal/util"
 )
 
+// WaitlistPromoter 候补晋升抽象（由 AdoptionApplicationService 实现）。
+// 地块释放后在同一事务内回调，将最早候补申请转为待审核。
+type WaitlistPromoter interface {
+	PromoteEarliestWaitlisted(tx *gorm.DB, plotID uint) (bool, error)
+}
+
 // PlotService 地块服务（认养使用事务 + SELECT FOR UPDATE）。
 type PlotService struct {
 	plotRepo repository.PlotRepository
 	db       *gorm.DB
 	logger   *slog.Logger
+	promoter WaitlistPromoter
 }
 
-// NewPlotService 构造地块服务。
-func NewPlotService(plotRepo repository.PlotRepository, db *gorm.DB, logger *slog.Logger) *PlotService {
-	return &PlotService{plotRepo: plotRepo, db: db, logger: logger}
+// NewPlotService 构造地块服务（promoter 可为 nil，表示释放后不晋升候补）。
+func NewPlotService(plotRepo repository.PlotRepository, db *gorm.DB, logger *slog.Logger, promoter WaitlistPromoter) *PlotService {
+	return &PlotService{plotRepo: plotRepo, db: db, logger: logger, promoter: promoter}
 }
 
 // GetByID 查询地块详情（被地块 handler 与种植计划 service 复用）。
@@ -159,6 +166,12 @@ func (s *PlotService) Release(plotID, operatorID uint, operatorRole string) (*mo
 		plot.AdopterID = nil
 		if err := s.plotRepo.UpdateWithTx(tx, plot); err != nil {
 			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
+		}
+		// 地块释放后，按申请时间将最早候补申请转为待审核（同一事务，失败整体回滚）
+		if s.promoter != nil {
+			if _, err := s.promoter.PromoteEarliestWaitlisted(tx, plotID); err != nil {
+				return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
+			}
 		}
 		released = plot
 		return nil

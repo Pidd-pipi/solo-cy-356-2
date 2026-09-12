@@ -104,6 +104,19 @@ CREATE TABLE IF NOT EXISTS community_comments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS adoption_applications (
+    id BIGSERIAL PRIMARY KEY,
+    plot_id BIGINT NOT NULL REFERENCES plots(id),
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    reason VARCHAR(512),
+    review_note VARCHAR(512),
+    reviewed_by BIGINT REFERENCES users(id),
+    reviewed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT,
@@ -119,6 +132,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_plots_status ON plots(status);
+CREATE INDEX IF NOT EXISTS idx_applications_plot ON adoption_applications(plot_id);
+CREATE INDEX IF NOT EXISTS idx_applications_user ON adoption_applications(user_id);
+CREATE INDEX IF NOT EXISTS idx_applications_status ON adoption_applications(status);
 CREATE INDEX IF NOT EXISTS idx_plans_user ON planting_plans(user_id);
 CREATE INDEX IF NOT EXISTS idx_plans_status ON planting_plans(status);
 CREATE INDEX IF NOT EXISTS idx_harvest_user ON harvest_records(user_id);

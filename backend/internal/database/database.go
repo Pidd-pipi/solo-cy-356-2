@@ -21,6 +21,7 @@ import (
 var Models = []interface{}{
 	&model.User{},
 	&model.Plot{},
+	&model.AdoptionApplication{},
 	&model.PlantingPlan{},
 	&model.HarvestRecord{},
 	&model.DiaryEntry{},
@@ -96,6 +97,16 @@ func Seed(db *gorm.DB, logger *slog.Logger) error {
 	}
 	for i := range seedPlots {
 		if err := db.Create(&seedPlots[i]).Error; err != nil {
+			return err
+		}
+	}
+
+	// 演示用认养申请：citizen 对 P-003 的待审核申请（管理员可在审核入口处理）
+	seedApplications := []model.AdoptionApplication{
+		{PlotID: seedPlots[2].ID, UserID: seedUsers[2].ID, Status: string(constants.ApplicationPending), Reason: "想给家人种点放心叶菜，周末可全天打理"},
+	}
+	for i := range seedApplications {
+		if err := db.Create(&seedApplications[i]).Error; err != nil {
 			return err
 		}
 	}

@@ -12,6 +12,8 @@ const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: () => import('@/pages/Dashboard.vue') },
         { path: 'plots', name: 'plots', component: () => import('@/pages/PlotMap.vue') },
+        { path: 'applications', name: 'applications', component: () => import('@/pages/Applications.vue') },
+        { path: 'application-review', name: 'application-review', component: () => import('@/pages/ApplicationReview.vue'), meta: { admin: true } },
         { path: 'plans', name: 'plans', component: () => import('@/pages/PlantingPlan.vue') },
         { path: 'diaries', name: 'diaries', component: () => import('@/pages/Diary.vue') },
         { path: 'harvests', name: 'harvests', component: () => import('@/pages/Harvest.vue') },

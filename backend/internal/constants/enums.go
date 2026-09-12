@@ -30,6 +30,26 @@ const (
 	PlotStatusHarvested PlotStatus = "harvested" // 已收成待释放
 )
 
+// ApplicationStatus 认养申请状态机：
+// pending -> approved / rejected / withdrawn；waitlisted -> pending（晋升）-> approved / rejected / withdrawn
+type ApplicationStatus string
+
+const (
+	ApplicationPending    ApplicationStatus = "pending"    // 待审核
+	ApplicationWaitlisted ApplicationStatus = "waitlisted" // 候补中（地块已有待审申请）
+	ApplicationApproved   ApplicationStatus = "approved"   // 已通过
+	ApplicationRejected   ApplicationStatus = "rejected"   // 已驳回
+	ApplicationWithdrawn  ApplicationStatus = "withdrawn"  // 已撤回
+)
+
+// ApplicationReviewAction 审核动作
+type ApplicationReviewAction string
+
+const (
+	ReviewActionApprove ApplicationReviewAction = "approve" // 审核通过
+	ReviewActionReject  ApplicationReviewAction = "reject"  // 审核驳回
+)
+
 // SoilType 土壤类型
 type SoilType string
 

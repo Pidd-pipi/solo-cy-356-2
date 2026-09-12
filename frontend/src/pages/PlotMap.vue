@@ -39,13 +39,30 @@
       <el-table-column label="认养人" width="120">
         <template #default="{ row }">{{ row.adopter?.nickname || row.adopter?.username || '-' }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="220">
+      <el-table-column label="操作" width="280">
         <template #default="{ row }">
+          <el-button v-if="row.status === 'available'" type="primary" size="small" @click="openApply(row)">申请认养</el-button>
           <el-button v-if="row.status === 'available'" type="success" size="small" @click="adopt(row)">认养</el-button>
           <el-button v-if="canRelease(row)" type="warning" size="small" @click="release(row)">释放</el-button>
         </template>
       </el-table-column>
     </DataTable>
+
+    <el-dialog v-model="applyVisible" title="提交认养申请" width="480px">
+      <el-form label-width="90px">
+        <el-form-item label="地块">
+          <span>{{ applyTarget?.code }} {{ applyTarget?.name }}</span>
+        </el-form-item>
+        <el-form-item label="申请理由">
+          <el-input v-model="applyReason" type="textarea" :rows="3" maxlength="512" placeholder="说说你的种植计划（可选）" />
+        </el-form-item>
+      </el-form>
+      <el-alert type="info" :closable="false" title="同一用户同一时间仅允许一份进行中的申请；若该地块已有待审申请，将自动进入候补队列。" />
+      <template #footer>
+        <el-button @click="applyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="applying" @click="submitApply">提交申请</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="createVisible" title="新增地块（管理员）" width="520px">
       <el-form :model="createForm" label-width="90px">
@@ -79,6 +96,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { usePlotStore } from '@/stores/plot'
 import { createPlot, type Plot } from '@/api/plot'
+import { applyForPlot } from '@/api/application'
 import { useAuth } from '@/hooks/useAuth'
 import { usePagination } from '@/hooks/usePagination'
 import DataTable from '@/components/DataTable.vue'
@@ -93,6 +111,11 @@ const { user, role, isAdmin } = useAuth()
 const createVisible = ref(false)
 const creating = ref(false)
 const createForm = reactive({ name: '', code: '', area: 10, soil_type: 'loam', sunlight: 'full', latitude: 31.2304, longitude: 121.4737, description: '' })
+
+const applyVisible = ref(false)
+const applying = ref(false)
+const applyTarget = ref<Plot | null>(null)
+const applyReason = ref('')
 
 const mapW = 600
 const mapH = 360
@@ -147,6 +170,28 @@ async function release(row: Plot) {
 
 function openCreate() {
   createVisible.value = true
+}
+
+function openApply(row: Plot) {
+  applyTarget.value = row
+  applyReason.value = ''
+  applyVisible.value = true
+}
+
+async function submitApply() {
+  if (!applyTarget.value) return
+  applying.value = true
+  try {
+    const app = await applyForPlot({ plot_id: applyTarget.value.id, reason: applyReason.value })
+    if (app.status === 'waitlisted') {
+      ElMessage.info('该地块已有待审申请，您的申请已进入候补队列')
+    } else {
+      ElMessage.success('认养申请已提交，可在「认养申请」页查看进度')
+    }
+    applyVisible.value = false
+  } finally {
+    applying.value = false
+  }
 }
 
 async function submitCreate() {

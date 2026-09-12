@@ -5,6 +5,8 @@
       <el-menu :default-active="activeMenu" router background-color="#001529" text-color="#a6adb4" active-text-color="#fff">
         <el-menu-item index="/"><el-icon><Odometer /></el-icon><span>平台概览</span></el-menu-item>
         <el-menu-item index="/plots"><el-icon><MapLocation /></el-icon><span>地块认养</span></el-menu-item>
+        <el-menu-item index="/applications"><el-icon><DocumentAdd /></el-icon><span>认养申请</span></el-menu-item>
+        <el-menu-item v-if="isAdmin" index="/application-review"><el-icon><Stamp /></el-icon><span>申请审核</span></el-menu-item>
         <el-menu-item index="/plans"><el-icon><Calendar /></el-icon><span>种植计划</span></el-menu-item>
         <el-menu-item index="/diaries"><el-icon><Notebook /></el-icon><span>种植日记</span></el-menu-item>
         <el-menu-item index="/harvests"><el-icon><Basket /></el-icon><span>收成记录</span></el-menu-item>
