@@ -29,24 +29,30 @@ func seedApp(t *testing.T, db *gorm.DB, plotID, userID uint, status string) *mod
 	return a
 }
 
-func TestAdoptionApplicationRepository_CountActiveAndPending(t *testing.T) {
+func TestAdoptionApplicationRepository_Counts(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewAdoptionApplicationRepository(db)
 	u1 := seedUser(t, db, "app-u1", "citizen")
 	u2 := seedUser(t, db, "app-u2", "citizen")
 	plot := seedPlotForApp(t, db, "P-REPO-1")
+	plot2 := seedPlotForApp(t, db, "P-REPO-1B")
 
 	seedApp(t, db, plot.ID, u1.ID, string(constants.ApplicationPending))
 	seedApp(t, db, plot.ID, u2.ID, string(constants.ApplicationWaitlisted))
+	seedApp(t, db, plot2.ID, u2.ID, string(constants.ApplicationPending))
 
 	err := db.Transaction(func(tx *gorm.DB) error {
-		active, err := repo.CountActiveByUser(tx, u1.ID)
-		if err != nil || active != 1 {
-			t.Errorf("CountActiveByUser u1 = %d, want 1 (err=%v)", active, err)
+		n, err := repo.CountActiveByUserOnPlot(tx, u1.ID, plot.ID)
+		if err != nil || n != 1 {
+			t.Errorf("CountActiveByUserOnPlot u1/plot = %d, want 1 (err=%v)", n, err)
 		}
-		active, err = repo.CountActiveByUser(tx, u2.ID)
-		if err != nil || active != 1 {
-			t.Errorf("CountActiveByUser u2 = %d, want 1 (err=%v)", active, err)
+		n, err = repo.CountActiveByUserOnPlot(tx, u1.ID, plot2.ID)
+		if err != nil || n != 0 {
+			t.Errorf("CountActiveByUserOnPlot u1/plot2 = %d, want 0 (err=%v)", n, err)
+		}
+		n, err = repo.CountPendingByUser(tx, u2.ID)
+		if err != nil || n != 1 {
+			t.Errorf("CountPendingByUser u2 = %d, want 1（候补不计入） (err=%v)", n, err)
 		}
 		pending, err := repo.CountPendingByPlot(tx, plot.ID)
 		if err != nil || pending != 1 {
@@ -59,13 +65,14 @@ func TestAdoptionApplicationRepository_CountActiveAndPending(t *testing.T) {
 	}
 }
 
-func TestAdoptionApplicationRepository_FindEarliestWaitlisted(t *testing.T) {
+func TestAdoptionApplicationRepository_FindEarliestEligibleWaitlisted(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewAdoptionApplicationRepository(db)
 	u1 := seedUser(t, db, "wl-u1", "citizen")
 	u2 := seedUser(t, db, "wl-u2", "citizen")
 	u3 := seedUser(t, db, "wl-u3", "citizen")
 	plot := seedPlotForApp(t, db, "P-REPO-2")
+	otherPlot := seedPlotForApp(t, db, "P-REPO-2B")
 
 	older := seedApp(t, db, plot.ID, u1.ID, string(constants.ApplicationWaitlisted))
 	// 手工构造更早/更晚的申请时间，验证按申请时间升序
@@ -75,12 +82,28 @@ func TestAdoptionApplicationRepository_FindEarliestWaitlisted(t *testing.T) {
 	db.Model(&model.AdoptionApplication{}).Where("id = ?", later.ID).Update("created_at", time.Now().Add(-1*time.Hour))
 
 	err := db.Transaction(func(tx *gorm.DB) error {
-		got, err := repo.FindEarliestWaitlistedForUpdate(tx, plot.ID)
+		got, err := repo.FindEarliestEligibleWaitlistedForUpdate(tx, plot.ID)
 		if err != nil {
-			t.Fatalf("FindEarliestWaitlistedForUpdate: %v", err)
+			t.Fatalf("FindEarliestEligibleWaitlistedForUpdate: %v", err)
 		}
 		if got.ID != older.ID {
-			t.Errorf("earliest waitlisted = id %d, want %d（最早申请时间）", got.ID, older.ID)
+			t.Errorf("earliest eligible waitlisted = id %d, want %d（最早申请时间）", got.ID, older.ID)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("tx: %v", err)
+	}
+
+	// u1 在别的地块持有待审核申请后，其候补应被跳过，晋升 u2
+	seedApp(t, db, otherPlot.ID, u1.ID, string(constants.ApplicationPending))
+	err = db.Transaction(func(tx *gorm.DB) error {
+		got, err := repo.FindEarliestEligibleWaitlistedForUpdate(tx, plot.ID)
+		if err != nil {
+			t.Fatalf("FindEarliestEligibleWaitlistedForUpdate with pending holder: %v", err)
+		}
+		if got.ID != later.ID {
+			t.Errorf("earliest eligible waitlisted = id %d, want %d（跳过已有待审核申请的居民）", got.ID, later.ID)
 		}
 		return nil
 	})
@@ -91,7 +114,7 @@ func TestAdoptionApplicationRepository_FindEarliestWaitlisted(t *testing.T) {
 	// 无候补时返回 ErrNotFound
 	emptyPlot := seedPlotForApp(t, db, "P-REPO-3")
 	err = db.Transaction(func(tx *gorm.DB) error {
-		if _, err := repo.FindEarliestWaitlistedForUpdate(tx, emptyPlot.ID); err != ErrNotFound {
+		if _, err := repo.FindEarliestEligibleWaitlistedForUpdate(tx, emptyPlot.ID); err != ErrNotFound {
 			t.Errorf("want ErrNotFound, got %v", err)
 		}
 		return nil

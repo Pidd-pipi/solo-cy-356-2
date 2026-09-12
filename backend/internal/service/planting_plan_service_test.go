@@ -45,9 +45,7 @@ func TestPlantingPlanService_CreateAndFlow(t *testing.T) {
 
 	user := newTestUser(t, db, "farmer", "farmer")
 	plot := newTestPlot(t, db, "P-PLAN", "available", nil)
-	if _, err := plotSvc.Adopt(plot.ID, user.ID, "farmer", "farmer"); err != nil {
-		t.Fatalf("adopt: %v", err)
-	}
+	adoptPlotDirect(t, db, plot.ID, user.ID)
 
 	// 季节不匹配的作物应报错
 	req := &dto.CreatePlanRequest{PlotID: plot.ID, CropName: "西瓜", CropType: "fruit", Season: "winter"}

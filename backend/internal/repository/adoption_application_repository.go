@@ -18,9 +18,10 @@ type AdoptionApplicationRepository interface {
 	FindByID(id uint) (*model.AdoptionApplication, error)
 	FindByIDForUpdate(tx *gorm.DB, id uint) (*model.AdoptionApplication, error)
 	LockApplicant(tx *gorm.DB, userID uint) error
-	CountActiveByUser(tx *gorm.DB, userID uint) (int64, error)
+	CountActiveByUserOnPlot(tx *gorm.DB, userID, plotID uint) (int64, error)
+	CountPendingByUser(tx *gorm.DB, userID uint) (int64, error)
 	CountPendingByPlot(tx *gorm.DB, plotID uint) (int64, error)
-	FindEarliestWaitlistedForUpdate(tx *gorm.DB, plotID uint) (*model.AdoptionApplication, error)
+	FindEarliestEligibleWaitlistedForUpdate(tx *gorm.DB, plotID uint) (*model.AdoptionApplication, error)
 	ListByUser(pq util.PageQuery, userID uint) ([]model.AdoptionApplication, int64, error)
 	List(pq util.PageQuery, status string) ([]model.AdoptionApplication, int64, error)
 }
@@ -78,11 +79,21 @@ func (r *adoptionApplicationRepository) LockApplicant(tx *gorm.DB, userID uint) 
 	return nil
 }
 
-// CountActiveByUser 统计用户进行中（待审核 + 候补中）的申请数。
-func (r *adoptionApplicationRepository) CountActiveByUser(tx *gorm.DB, userID uint) (int64, error) {
+// CountActiveByUserOnPlot 统计用户在指定地块进行中（待审核 + 候补中）的申请数（同一地块重复提交拦截）。
+func (r *adoptionApplicationRepository) CountActiveByUserOnPlot(tx *gorm.DB, userID, plotID uint) (int64, error) {
 	var count int64
 	err := tx.Model(&model.AdoptionApplication{}).
-		Where("user_id = ? AND status IN ?", userID, []string{string(constants.ApplicationPending), string(constants.ApplicationWaitlisted)}).
+		Where("user_id = ? AND plot_id = ? AND status IN ?", userID, plotID,
+			[]string{string(constants.ApplicationPending), string(constants.ApplicationWaitlisted)}).
+		Count(&count).Error
+	return count, err
+}
+
+// CountPendingByUser 统计用户待审核申请数（同一居民同一时间仅允许一份待审核申请）。
+func (r *adoptionApplicationRepository) CountPendingByUser(tx *gorm.DB, userID uint) (int64, error) {
+	var count int64
+	err := tx.Model(&model.AdoptionApplication{}).
+		Where("user_id = ? AND status = ?", userID, string(constants.ApplicationPending)).
 		Count(&count).Error
 	return count, err
 }
@@ -96,11 +107,16 @@ func (r *adoptionApplicationRepository) CountPendingByPlot(tx *gorm.DB, plotID u
 	return count, err
 }
 
-// FindEarliestWaitlistedForUpdate 查询地块最早的候补申请（按申请时间升序，行锁）。
-func (r *adoptionApplicationRepository) FindEarliestWaitlistedForUpdate(tx *gorm.DB, plotID uint) (*model.AdoptionApplication, error) {
+// FindEarliestEligibleWaitlistedForUpdate 查询地块最早的可晋升候补申请（按申请时间升序，行锁）。
+// 跳过已持有待审核申请的居民，保证晋升后同一居民仍只有一份待审核申请。
+func (r *adoptionApplicationRepository) FindEarliestEligibleWaitlistedForUpdate(tx *gorm.DB, plotID uint) (*model.AdoptionApplication, error) {
 	var a model.AdoptionApplication
+	pendingUsers := tx.Model(&model.AdoptionApplication{}).
+		Select("user_id").
+		Where("status = ?", string(constants.ApplicationPending))
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("plot_id = ? AND status = ?", plotID, string(constants.ApplicationWaitlisted)).
+		Where("user_id NOT IN (?)", pendingUsers).
 		Order("created_at ASC, id ASC").
 		First(&a).Error
 	if err != nil {

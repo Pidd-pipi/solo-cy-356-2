@@ -45,15 +45,10 @@ paths:
       tags: [plots]
       summary: 更新地块（管理员）
       responses: { '200': { description: 成功 } }
-  /plots/{id}/adopt:
-    post:
-      tags: [plots]
-      summary: 认养地块
-      responses: { '200': { description: 成功 } }
   /plots/{id}/release:
     post:
       tags: [plots]
-      summary: 释放地块（释放后最早候补申请自动转为待审核）
+      summary: 释放地块（释放后最早合格候补申请自动转为待审核）
       responses: { '200': { description: 成功 } }
   /applications:
     get:
@@ -63,7 +58,7 @@ paths:
       responses: { '200': { description: 成功 } }
     post:
       tags: [applications]
-      summary: 提交认养申请（同一用户仅允许一份进行中申请；地块已有待审申请时进入候补队列）
+      summary: 提交认养申请（同一居民在同一地块仅允许一份进行中申请、同一时间仅允许一份待审核申请；地块已有待审申请时进入候补队列）
       requestBody:
         required: true
         content:

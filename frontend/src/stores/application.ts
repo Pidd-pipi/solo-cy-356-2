@@ -19,8 +19,9 @@ interface ApplicationState {
 export const useApplicationStore = defineStore('application', {
   state: (): ApplicationState => ({ mine: [], mineTotal: 0, adminList: [], adminTotal: 0, loading: false }),
   getters: {
-    // 进行中的申请（待审核/候补中），同一用户同一时间仅允许一份
-    activeApplication: (s) => s.mine.find((a) => a.status === 'pending' || a.status === 'waitlisted')
+    // 待审核中的申请（同一居民同一时间仅允许一份；候补不限制）
+    pendingApplication: (s) => s.mine.find((a) => a.status === 'pending'),
+    waitlistedApplications: (s) => s.mine.filter((a) => a.status === 'waitlisted')
   },
   actions: {
     async fetchMine(params?: Record<string, any>) {

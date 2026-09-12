@@ -116,35 +116,6 @@ func (s *PlotService) List(pq util.PageQuery, status string) ([]model.Plot, int6
 	return plots, total, nil
 }
 
-// Adopt 认养地块（事务 + 行锁，available -> adopted）。
-func (s *PlotService) Adopt(plotID, userID uint, role, username string) (*model.Plot, error) {
-	var adopted *model.Plot
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		plot, err := s.plotRepo.FindByIDForUpdate(tx, plotID)
-		if err != nil {
-			if errors.Is(err, repository.ErrNotFound) {
-				return util.NewAppError(constants.CodeNotFound, 404, fmt.Sprintf("地块实体 id=%d 不存在", plotID))
-			}
-			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
-		}
-		if plot.Status != string(constants.PlotStatusAvailable) {
-			return util.NewAppError(constants.CodePlotNotAvailable, 409, fmt.Sprintf("地块 %s 当前状态为 %s，不可认养", plot.Code, util.PlotStatusText(plot.Status)))
-		}
-		plot.Status = string(constants.PlotStatusAdopted)
-		plot.AdopterID = &userID
-		if err := s.plotRepo.UpdateWithTx(tx, plot); err != nil {
-			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
-		}
-		adopted = plot
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	s.logger.Info(constants.LogPlotAdopted, "plot_id", adopted.ID, "code", adopted.Code, "user_id", userID, "role", role)
-	return adopted, nil
-}
-
 // Release 释放地块（管理员或认养人，harvested -> available）。
 func (s *PlotService) Release(plotID, operatorID uint, operatorRole string) (*model.Plot, error) {
 	var released *model.Plot

@@ -17,7 +17,6 @@ const (
 	LogUserRoleChanged        = "user role changed, user_id=%d operator=%s from=%s to=%s"
 	LogUserStatusChanged      = "user status changed, user_id=%d operator=%s to=%s"
 	LogPlotCreated            = "plot created, plot_id=%d code=%s operator=%s"
-	LogPlotAdopted            = "plot adopted, plot_id=%d code=%s user_id=%d role=%s"
 	LogPlotReleased           = "plot released, plot_id=%d code=%s operator=%s"
 	LogApplicationSubmitted   = "adoption application submitted, application_id=%d plot_id=%d user_id=%d status=%s"
 	LogApplicationWithdrawn   = "adoption application withdrawn, application_id=%d user_id=%d operator_role=%s"

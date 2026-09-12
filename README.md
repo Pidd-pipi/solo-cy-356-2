@@ -29,7 +29,7 @@ docker compose up -d --build
 ## ✨ 主要功能
 
 1. **地块认养与 GIS 展示**：地图展示地块分布，标注空闲/已认养/待释放状态，展示面积、土壤类型、日照条件，在线认养。
-2. **地块认养申请审核流**：居民申请空闲地块（同一用户仅允许一份进行中申请，重复提交被拦截），地块已有待审申请时自动进入候补队列；支持撤回；管理员审核通过/驳回；通过后申请与地块状态同事务同步；驳回、撤回或地块释放后按申请时间将最早候补申请转为待审核。
+2. **地块认养申请审核流**：居民申请空闲地块（同一居民在同一地块仅允许一份进行中申请，同一时间仅允许一份待审核申请；候补中的居民可继续申请其他空闲地块），地块已有待审申请时自动进入候补队列；支持撤回；管理员审核通过/驳回；通过后申请与地块状态同事务同步（地块被认养只能经由申请审核通过，无直接认养入口）；驳回、撤回或地块释放后按申请时间将最早合格候补申请转为待审核（跳过已持有待审核申请的居民）。
 3. **种植计划与作物推荐**：认养后制定种植计划，按季节推荐适宜作物，生成预期收获时间线（蔬菜 45 天/水果 90 天/香草 35 天）。
 4. **种植日记图文记录**：按播种/浇水/施肥/除虫/收成记录种植过程，支持点赞与评论。
 5. **收成预警与采摘提醒**：近 7 天成熟作物自动提醒，记录采摘重量与品质，生成年度收成统计报表。
@@ -118,7 +118,7 @@ README.md
 | 枚举 | 取值 | 后端出现位置 |
 | --- | --- | --- |
 | RoleType 角色 | admin / farmer / citizen | `constants/enums.go`、`model/user.go`、`dto/user_dto.go`、`service/user_service.go`（ChangeRole 校验）、`middleware/rbac.go`、`middleware/audit.go`、`handler/planting_plan_handler.go`、`handler/harvest_handler.go`、`handler/diary_handler.go`、`util/formatters.go`、`log_templates.go`、`error_codes.go`、`database/database.go`（种子数据） |
-| PlotStatus 地块状态 | available / adopted / harvested | `constants/enums.go`、`model/plot.go`、`dto/plot_dto.go`、`service/plot_service.go`（认养/释放状态机）、`repository/plot_repository.go`（过滤）、`util/formatters.go`、`log_templates.go`、`database/database.go`（种子数据）、`api/openapi.yaml` |
+| PlotStatus 地块状态 | available / adopted / harvested | `constants/enums.go`、`model/plot.go`、`dto/plot_dto.go`、`service/plot_service.go`（释放状态机）、`service/adoption_application_service.go`（审核通过同步认养）、`repository/plot_repository.go`（过滤）、`util/formatters.go`、`log_templates.go`、`database/database.go`（种子数据）、`api/openapi.yaml` |
 | ApplicationStatus 认养申请状态 | pending / waitlisted / approved / rejected / withdrawn | `constants/enums.go`、`model/adoption_application.go`、`dto/adoption_application_dto.go`（review oneof 校验）、`service/adoption_application_service.go`（申请/撤回/审核/候补晋升状态机）、`repository/adoption_application_repository.go`（过滤/最早候补）、`handler/adoption_application_handler.go`、`util/formatters.go`、`log_templates.go`、`error_codes.go`（CodeApplicationExists / CodeApplicationNotActionable）、`database/database.go`（种子数据）、前端 `constants/index.ts`（ApplicationStatusMeta 徽标）、`api/openapi.yaml` |
 | PlanStatus 种植计划状态 | planned / planting / growing / harvesting / completed | `constants/enums.go`、`model/planting_plan.go`、`dto/planting_plan_dto.go`（oneof 校验）、`service/planting_plan_service.go`（PlanStatusTransitions 状态机）、`handler/planting_plan_handler.go`、`util/formatters.go`、`log_templates.go`、`error_codes.go`（CodePlanStateNotAllowed）、`database/database.go`（种子数据）、前端 `constants/index.ts`（PlanStatusMeta / PlanStatusNext 按钮显隐） |
 | CropType 作物类型 | vegetable / fruit / herb | `constants/enums.go`、`model/planting_plan.go`、`dto/planting_plan_dto.go`、`service/planting_plan_service.go`（成熟时间估算）、`util/formatters.go`、`repository/harvest_record_repository.go`（分组统计）、`database/database.go` |
@@ -154,15 +154,14 @@ README.md
 | GET | `/plots/:id` | 地块详情 | 公开 |
 | POST | `/plots` | 创建地块 | 管理员 |
 | PUT | `/plots/:id` | 更新地块 | 管理员 |
-| POST | `/plots/:id/adopt` | 认养地块（事务 + FOR UPDATE） | 登录 |
-| POST | `/plots/:id/release` | 释放地块（同事务晋升最早候补申请） | 认养人/管理员 |
+| POST | `/plots/:id/release` | 释放地块（同事务晋升最早合格候补申请） | 认养人/管理员 |
 
 ### 认养申请
 | 方法 | 路径 | 说明 | 鉴权 |
 | --- | --- | --- | --- |
-| POST | `/applications` | 提交认养申请（一人一份进行中申请；地块已有待审申请时进候补） | 登录 |
+| POST | `/applications` | 提交认养申请（同一地块/同一居民仅一份待审核；地块已有待审申请时进候补） | 登录 |
 | GET | `/applications/mine` | 我的申请列表（进度查询） | 登录 |
-| POST | `/applications/:id/withdraw` | 撤回申请（撤回待审申请后晋升最早候补） | 本人/管理员 |
+| POST | `/applications/:id/withdraw` | 撤回申请（撤回待审申请后晋升最早合格候补） | 本人/管理员 |
 | GET | `/applications` | 全部申请列表（`?status=` 过滤） | 管理员 |
 | POST | `/applications/:id/review` | 审核（approve 同事务同步地块认养状态 / reject 晋升候补） | 管理员 |
 
@@ -235,9 +234,10 @@ curl -s http://localhost:29516/healthz
 # 3. 地块列表
 curl -s http://localhost:29516/api/v1/plots
 
-# 4. 认养地块（登录用户）
-curl -s -X POST http://localhost:29516/api/v1/plots/1/adopt \
-  -H "Authorization: Bearer $TOKEN"
+# 4. 提交认养申请（登录用户；地块被认养只能经由申请审核通过）
+curl -s -X POST http://localhost:29516/api/v1/applications \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"plot_id":1,"reason":"想种番茄"}'
 
 # 5. 创建种植计划
 curl -s -X POST http://localhost:29516/api/v1/planting-plans \

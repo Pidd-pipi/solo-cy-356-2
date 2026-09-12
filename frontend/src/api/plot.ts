@@ -40,10 +40,6 @@ export function createPlot(payload: PlotPayload): Promise<Plot> {
   return post('/plots', payload)
 }
 
-export function adoptPlot(id: number): Promise<Plot> {
-  return post(`/plots/${id}/adopt`)
-}
-
 export function releasePlot(id: number): Promise<Plot> {
   return post(`/plots/${id}/release`)
 }

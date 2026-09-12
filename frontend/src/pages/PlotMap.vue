@@ -39,10 +39,9 @@
       <el-table-column label="认养人" width="120">
         <template #default="{ row }">{{ row.adopter?.nickname || row.adopter?.username || '-' }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="280">
+      <el-table-column label="操作" width="220">
         <template #default="{ row }">
           <el-button v-if="row.status === 'available'" type="primary" size="small" @click="openApply(row)">申请认养</el-button>
-          <el-button v-if="row.status === 'available'" type="success" size="small" @click="adopt(row)">认养</el-button>
           <el-button v-if="canRelease(row)" type="warning" size="small" @click="release(row)">释放</el-button>
         </template>
       </el-table-column>
@@ -144,16 +143,6 @@ async function fetch() {
 
 function canRelease(row: Plot) {
   return row.status === 'harvested' && (role.value === 'admin' || row.adopter_id === user.value?.id)
-}
-
-async function adopt(row: Plot) {
-  try {
-    await ElMessageBox.confirm(`确认认养地块 ${row.name}（${row.code}）吗？`, '认养确认', { type: 'success' })
-  } catch {
-    return
-  }
-  await store.adopt(row.id)
-  ElMessage.success('认养成功，开始你的都市农夫之旅')
 }
 
 async function release(row: Plot) {

@@ -6,7 +6,6 @@ const (
 	MsgWelcome          = "欢迎使用城市共享菜园管理平台"
 	MsgLoginRequired    = "请先登录后再继续操作"
 	MsgPermissionDenied = "当前角色 %s 无权执行该操作，需要角色: %s"
-	MsgPlotAdoptSuccess = "地块认养成功，开始你的都市农夫之旅"
 	MsgPlotReleaseOK    = "地块已释放，重新回到共享池"
 	MsgPlanCreatedOK    = "种植计划创建成功，系统已生成预期收获时间线"
 	MsgPlanStatusOK     = "种植计划状态已更新为 %s"

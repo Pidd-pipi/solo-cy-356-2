@@ -92,24 +92,6 @@ func (h *PlotHandler) Get(c *gin.Context) {
 	util.OK(c, dto.ToPlotOutDTO(p))
 }
 
-// Adopt 认养地块（登录用户）。
-func (h *PlotHandler) Adopt(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		util.Fail(c, http.StatusBadRequest, constants.CodeBadRequest, "路径参数 id 必须为正整数")
-		return
-	}
-	claims, _ := util.GetClaims(c)
-	p, err := h.plotService.Adopt(uint(id), claims.UserID, claims.Role, claims.Username)
-	if err != nil {
-		util.FailWithAppError(c, err)
-		return
-	}
-	_ = h.audit.Write(claims.UserID, claims.Username, claims.Role, "ADOPT_PLOT", "plot", strconv.FormatUint(uint64(id), 10),
-		"用户认养地块 "+p.Code, c.ClientIP(), util.GetRequestID(c))
-	util.OK(c, dto.ToPlotOutDTO(p))
-}
-
 // Release 释放地块（管理员或认养人）。
 func (h *PlotHandler) Release(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)

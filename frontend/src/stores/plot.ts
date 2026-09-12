@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { adoptPlot, listPlots, type Plot } from '@/api/plot'
+import { listPlots, type Plot } from '@/api/plot'
 
 interface PlotState {
   plots: Plot[]
@@ -19,10 +19,6 @@ export const usePlotStore = defineStore('plot', {
       } finally {
         this.loading = false
       }
-    },
-    async adopt(id: number) {
-      await adoptPlot(id)
-      await this.fetchPlots()
     }
   }
 })

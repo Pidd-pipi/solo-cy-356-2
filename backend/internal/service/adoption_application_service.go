@@ -28,22 +28,15 @@ func NewAdoptionApplicationService(appRepo repository.AdoptionApplicationReposit
 	return &AdoptionApplicationService{appRepo: appRepo, plotRepo: plotRepo, db: db, logger: logger}
 }
 
-// Apply 提交认养申请：同一用户同一时间仅允许一份进行中（待审核/候补中）申请；
-// 地块已有待审申请时新申请进入候补队列，否则直接成为待审核。
+// Apply 提交认养申请。
+// 规则：同一居民在同一地块仅允许一份进行中（待审核/候补中）的申请；同一居民同一时间仅允许一份
+// 待审核申请（候补不限，候补中的居民可继续申请其他空闲地块）；地块已有待审申请时新申请进入候补队列。
 func (s *AdoptionApplicationService) Apply(userID uint, req *dto.CreateApplicationRequest, username, role string) (*model.AdoptionApplication, error) {
 	var created *model.AdoptionApplication
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		// 锁定申请人用户行，串行化同一用户的并发申请
 		if err := s.appRepo.LockApplicant(tx, userID); err != nil {
 			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
-		}
-		active, err := s.appRepo.CountActiveByUser(tx, userID)
-		if err != nil {
-			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
-		}
-		if active > 0 {
-			return util.NewAppError(constants.CodeApplicationExists, 409,
-				fmt.Sprintf("用户 %s（角色 %s）已存在待审核或候补中的认养申请，同一时间仅允许保留一份", username, util.RoleText(role)))
 		}
 		plot, err := s.plotRepo.FindByIDForUpdate(tx, req.PlotID)
 		if err != nil {
@@ -56,13 +49,31 @@ func (s *AdoptionApplicationService) Apply(userID uint, req *dto.CreateApplicati
 			return util.NewAppError(constants.CodePlotNotAvailable, 409,
 				fmt.Sprintf("地块 %s 当前状态为 %s，不可申请认养", plot.Code, util.PlotStatusText(plot.Status)))
 		}
-		pending, err := s.appRepo.CountPendingByPlot(tx, req.PlotID)
+		// 同一居民在同一地块仅允许一份进行中的申请（重复提交拦截）
+		samePlot, err := s.appRepo.CountActiveByUserOnPlot(tx, userID, req.PlotID)
 		if err != nil {
 			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
 		}
-		status := string(constants.ApplicationPending)
-		if pending > 0 {
-			status = string(constants.ApplicationWaitlisted)
+		if samePlot > 0 {
+			return util.NewAppError(constants.CodeApplicationExists, 409,
+				fmt.Sprintf("用户 %s（角色 %s）在地块 %s 已存在待审核或候补中的申请，请勿重复提交", username, util.RoleText(role), plot.Code))
+		}
+		pendingOnPlot, err := s.appRepo.CountPendingByPlot(tx, req.PlotID)
+		if err != nil {
+			return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
+		}
+		status := string(constants.ApplicationWaitlisted)
+		if pendingOnPlot == 0 {
+			// 新申请将成为待审核：同一居民同一时间仅允许一份待审核申请
+			pendingByUser, err := s.appRepo.CountPendingByUser(tx, userID)
+			if err != nil {
+				return util.NewAppError(constants.CodeInternalError, 500, constants.ErrorText[constants.CodeInternalError]).Wrap(err)
+			}
+			if pendingByUser > 0 {
+				return util.NewAppError(constants.CodeApplicationExists, 409,
+					fmt.Sprintf("用户 %s（角色 %s）已存在待审核的认养申请，同一居民同一时间仅允许一份待审核申请", username, util.RoleText(role)))
+			}
+			status = string(constants.ApplicationPending)
 		}
 		app := &model.AdoptionApplication{
 			PlotID: req.PlotID,
@@ -201,11 +212,12 @@ func (s *AdoptionApplicationService) Review(appID, reviewerID uint, reviewerName
 	return s.appRepo.FindByID(reviewed.ID)
 }
 
-// PromoteEarliestWaitlisted 将地块最早的候补申请晋升为待审核（按申请时间升序）。
-// 驳回、撤回待审申请、地块释放后调用；无候补时返回 promoted=false。
+// PromoteEarliestWaitlisted 将地块最早的可晋升候补申请转为待审核（按申请时间升序，
+// 跳过已持有待审核申请的居民，保证同一居民仍只有一份待审核申请）。
+// 驳回、撤回待审申请、地块释放后调用；无合格候补时返回 promoted=false。
 // 实现 WaitlistPromoter 接口，供 PlotService 释放地块时在同一事务内回调。
 func (s *AdoptionApplicationService) PromoteEarliestWaitlisted(tx *gorm.DB, plotID uint) (bool, error) {
-	next, err := s.appRepo.FindEarliestWaitlistedForUpdate(tx, plotID)
+	next, err := s.appRepo.FindEarliestEligibleWaitlistedForUpdate(tx, plotID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return false, nil

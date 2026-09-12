@@ -56,30 +56,54 @@ func TestApplicationService_Apply(t *testing.T) {
 	}
 }
 
-func TestApplicationService_ApplyDuplicateBlocked(t *testing.T) {
+func TestApplicationService_ApplyRules(t *testing.T) {
 	db := newTestServiceDB(t)
 	svc, _ := newAppServices(t, db)
-	u1 := newTestUser(t, db, "dup-u1", "citizen")
-	plotA := newTestPlot(t, db, "P-DUP-A", "available", nil)
-	plotB := newTestPlot(t, db, "P-DUP-B", "available", nil)
+	u1 := newTestUser(t, db, "rule-u1", "citizen")
+	u2 := newTestUser(t, db, "rule-u2", "citizen")
+	plotA := newTestPlot(t, db, "P-RULE-A", "available", nil)
+	plotB := newTestPlot(t, db, "P-RULE-B", "available", nil)
+	plotC := newTestPlot(t, db, "P-RULE-C", "available", nil)
 
-	if _, err := svc.Apply(u1.ID, &dto.CreateApplicationRequest{PlotID: plotA.ID}, "dup-u1", "citizen"); err != nil {
-		t.Fatalf("Apply first: %v", err)
+	// u1 申请 plotA -> 待审核
+	if _, err := svc.Apply(u1.ID, &dto.CreateApplicationRequest{PlotID: plotA.ID}, "rule-u1", "citizen"); err != nil {
+		t.Fatalf("u1 apply plotA: %v", err)
 	}
-
-	tests := []struct {
-		name   string
-		plotID uint
-	}{
-		{name: "same plot again", plotID: plotA.ID},
-		{name: "another plot while pending", plotID: plotB.ID},
+	// 同一地块重复提交被拦截
+	if _, err := svc.Apply(u1.ID, &dto.CreateApplicationRequest{PlotID: plotA.ID}, "rule-u1", "citizen"); err == nil {
+		t.Fatalf("expected duplicate application on same plot to be blocked")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if _, err := svc.Apply(u1.ID, &dto.CreateApplicationRequest{PlotID: tt.plotID}, "dup-u1", "citizen"); err == nil {
-				t.Fatalf("expected duplicate application to be blocked")
-			}
-		})
+	// 已有待审核申请，再申请无待审的地块（会成为第二份待审核）被拦截
+	if _, err := svc.Apply(u1.ID, &dto.CreateApplicationRequest{PlotID: plotB.ID}, "rule-u1", "citizen"); err == nil {
+		t.Fatalf("expected second pending application to be blocked")
+	}
+	// u2 申请 plotA（已有待审）-> 候补
+	a2, err := svc.Apply(u2.ID, &dto.CreateApplicationRequest{PlotID: plotA.ID}, "rule-u2", "citizen")
+	if err != nil {
+		t.Fatalf("u2 apply plotA: %v", err)
+	}
+	if a2.Status != string(constants.ApplicationWaitlisted) {
+		t.Errorf("u2 plotA status=%s, want waitlisted", a2.Status)
+	}
+	// 候补中的居民可以申请其他空闲地块 -> 待审核
+	a3, err := svc.Apply(u2.ID, &dto.CreateApplicationRequest{PlotID: plotB.ID}, "rule-u2", "citizen")
+	if err != nil {
+		t.Fatalf("waitlisted u2 apply plotB should be allowed: %v", err)
+	}
+	if a3.Status != string(constants.ApplicationPending) {
+		t.Errorf("u2 plotB status=%s, want pending", a3.Status)
+	}
+	// u2 已持有待审核（plotB），再申请无待审的 plotC 被拦截
+	if _, err := svc.Apply(u2.ID, &dto.CreateApplicationRequest{PlotID: plotC.ID}, "rule-u2", "citizen"); err == nil {
+		t.Fatalf("expected second pending application on plotC to be blocked")
+	}
+	// 已持有待审核的居民申请已有待审的地块 -> 允许进入候补（不增加待审核数量）
+	a4, err := svc.Apply(u1.ID, &dto.CreateApplicationRequest{PlotID: plotB.ID}, "rule-u1", "citizen")
+	if err != nil {
+		t.Fatalf("u1 with pending should be allowed to waitlist on plotB: %v", err)
+	}
+	if a4.Status != string(constants.ApplicationWaitlisted) {
+		t.Errorf("u1 plotB status=%s, want waitlisted", a4.Status)
 	}
 }
 
@@ -139,6 +163,40 @@ func TestApplicationService_WithdrawPromotesWaitlisted(t *testing.T) {
 	// 他人不可撤回
 	if _, err := svc.Withdraw(a3.ID, u2.ID, "citizen"); err == nil {
 		t.Fatalf("expected forbidden error for non-owner withdraw")
+	}
+}
+
+func TestApplicationService_PromotionSkipsUserWithPending(t *testing.T) {
+	db := newTestServiceDB(t)
+	svc, _ := newAppServices(t, db)
+	u1 := newTestUser(t, db, "skip-u1", "citizen")
+	u2 := newTestUser(t, db, "skip-u2", "citizen")
+	u3 := newTestUser(t, db, "skip-u3", "citizen")
+	plotA := newTestPlot(t, db, "P-SKIP-A", "available", nil)
+	plotB := newTestPlot(t, db, "P-SKIP-B", "available", nil)
+
+	// plotA：u1 待审核，u2/u3 依次候补；u2 在 plotB 已持有待审核
+	a1 := seedApplication(t, db, plotA.ID, u1.ID, string(constants.ApplicationPending))
+	a2 := seedApplication(t, db, plotA.ID, u2.ID, string(constants.ApplicationWaitlisted))
+	a3 := seedApplication(t, db, plotA.ID, u3.ID, string(constants.ApplicationWaitlisted))
+	seedApplication(t, db, plotB.ID, u2.ID, string(constants.ApplicationPending))
+
+	// u1 撤回后，最早候补 u2 已有待审核申请（plotB），应跳过并晋升 u3
+	if _, err := svc.Withdraw(a1.ID, u1.ID, "citizen"); err != nil {
+		t.Fatalf("Withdraw: %v", err)
+	}
+	var skipped, promoted model.AdoptionApplication
+	if err := db.First(&skipped, a2.ID).Error; err != nil {
+		t.Fatalf("reload a2: %v", err)
+	}
+	if skipped.Status != string(constants.ApplicationWaitlisted) {
+		t.Errorf("a2 status=%s, want still waitlisted（持有者已有待审核申请应被跳过）", skipped.Status)
+	}
+	if err := db.First(&promoted, a3.ID).Error; err != nil {
+		t.Fatalf("reload a3: %v", err)
+	}
+	if promoted.Status != string(constants.ApplicationPending) {
+		t.Errorf("a3 status=%s, want promoted to pending", promoted.Status)
 	}
 }
 

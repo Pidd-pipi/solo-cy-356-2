@@ -5,15 +5,22 @@
     <el-card shadow="never" style="margin-bottom: 16px">
       <template #header>发起认养申请</template>
       <el-alert
-        v-if="store.activeApplication"
+        v-if="store.pendingApplication"
         type="warning"
         :closable="false"
         style="margin-bottom: 12px"
-        :title="`您已有一份${ApplicationStatusMeta[store.activeApplication.status]?.label}的申请（地块 ${store.activeApplication.plot?.code}），同一时间仅允许保留一份，撤回后可重新申请。`"
+        :title="`您已有一份待审核的申请（地块 ${store.pendingApplication.plot?.code}），同一居民仅允许一份待审核申请；仍可申请其他地块进入候补队列。`"
+      />
+      <el-alert
+        v-else-if="store.waitlistedApplications.length"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 12px"
+        :title="`您有 ${store.waitlistedApplications.length} 份候补中的申请，仍可继续申请其他空闲地块。`"
       />
       <el-form inline @submit.prevent>
         <el-form-item label="空闲地块">
-          <el-select v-model="applyForm.plotId" placeholder="选择地块" style="width: 240px" :disabled="!!store.activeApplication">
+          <el-select v-model="applyForm.plotId" placeholder="选择地块" style="width: 240px">
             <el-option v-for="p in availablePlots" :key="p.id" :label="`${p.code} ${p.name}（${formatArea(p.area)}）`" :value="p.id" />
           </el-select>
         </el-form-item>
@@ -21,12 +28,12 @@
           <el-input v-model="applyForm.reason" placeholder="说说你的种植计划（可选）" style="width: 320px" maxlength="512" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="submitting" :disabled="!!store.activeApplication || !applyForm.plotId" @click="submitApply">
+          <el-button type="primary" :loading="submitting" :disabled="!applyForm.plotId" @click="submitApply">
             提交申请
           </el-button>
         </el-form-item>
       </el-form>
-      <div class="tip">地块已有待审申请时，新申请将自动进入候补队列，前序申请被驳回/撤回或地块释放后按申请时间依次转正。</div>
+      <div class="tip">同一居民在同一地块仅允许一份进行中的申请，同一时间仅允许一份待审核申请；地块已有待审申请时，新申请将自动进入候补队列，前序申请被驳回/撤回或地块释放后按申请时间依次转正。</div>
     </el-card>
 
     <el-card shadow="never">

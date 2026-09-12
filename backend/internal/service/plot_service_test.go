@@ -8,40 +8,6 @@ import (
 	"github.com/communitygarden/server/internal/util"
 )
 
-func TestPlotService_Adopt(t *testing.T) {
-	db := newTestServiceDB(t)
-	svc, _ := newPlotService(t, db)
-	user := newTestUser(t, db, "citizen", "citizen")
-	plot := newTestPlot(t, db, "P-ADOPT", "available", nil)
-
-	tests := []struct {
-		name    string
-		plotID  uint
-		userID  uint
-		wantErr bool
-	}{
-		{name: "adopt available", plotID: plot.ID, userID: user.ID, wantErr: false},
-		{name: "adopt again conflicts", plotID: plot.ID, userID: user.ID, wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := svc.Adopt(tt.plotID, tt.userID, "citizen", "citizen")
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Adopt: %v", err)
-			}
-			if got.Status != string(constants.PlotStatusAdopted) || got.AdopterID == nil || *got.AdopterID != tt.userID {
-				t.Errorf("adopt result invalid: status=%s adopter=%v", got.Status, got.AdopterID)
-			}
-		})
-	}
-}
-
 func TestPlotService_Release(t *testing.T) {
 	db := newTestServiceDB(t)
 	svc, _ := newPlotService(t, db)

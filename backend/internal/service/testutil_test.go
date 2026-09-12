@@ -69,6 +69,15 @@ func newTestPlot(t *testing.T, db *gorm.DB, code, status string, adopterID *uint
 	return p
 }
 
+// adoptPlotDirect 直接将地块置为已认养（模拟申请审核通过后的状态，供测试前置准备使用）。
+func adoptPlotDirect(t *testing.T, db *gorm.DB, plotID, userID uint) {
+	t.Helper()
+	if err := db.Model(&model.Plot{}).Where("id = ?", plotID).
+		Updates(map[string]interface{}{"status": "adopted", "adopter_id": userID}).Error; err != nil {
+		t.Fatalf("adopt plot direct: %v", err)
+	}
+}
+
 func newPlotService(t *testing.T, db *gorm.DB) (*PlotService, repository.PlotRepository) {
 	t.Helper()
 	plotRepo := repository.NewPlotRepository(db)

@@ -25,7 +25,6 @@ func (r *Router) registerPlots(g *gin.RouterGroup) {
 	auth := plots.Group("")
 	auth.Use(middleware.Auth(r.cfg, r.logger))
 	{
-		auth.POST("/:id/adopt", r.plotHandler.Adopt)
 		auth.POST("/:id/release", r.plotHandler.Release)
 	}
 }
