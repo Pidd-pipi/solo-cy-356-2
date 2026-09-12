@@ -21,7 +21,7 @@ type AdoptionApplicationRepository interface {
 	CountActiveByUserOnPlot(tx *gorm.DB, userID, plotID uint) (int64, error)
 	CountPendingByUser(tx *gorm.DB, userID uint) (int64, error)
 	CountPendingByPlot(tx *gorm.DB, plotID uint) (int64, error)
-	FindEarliestEligibleWaitlistedForUpdate(tx *gorm.DB, plotID uint) (*model.AdoptionApplication, error)
+	ListWaitlistedForUpdate(tx *gorm.DB, plotID uint) ([]model.AdoptionApplication, error)
 	ListByUser(pq util.PageQuery, userID uint) ([]model.AdoptionApplication, int64, error)
 	List(pq util.PageQuery, status string) ([]model.AdoptionApplication, int64, error)
 }
@@ -107,25 +107,16 @@ func (r *adoptionApplicationRepository) CountPendingByPlot(tx *gorm.DB, plotID u
 	return count, err
 }
 
-// FindEarliestEligibleWaitlistedForUpdate 查询地块最早的可晋升候补申请（按申请时间升序，行锁）。
-// 跳过已持有待审核申请的居民，保证晋升后同一居民仍只有一份待审核申请。
-func (r *adoptionApplicationRepository) FindEarliestEligibleWaitlistedForUpdate(tx *gorm.DB, plotID uint) (*model.AdoptionApplication, error) {
-	var a model.AdoptionApplication
-	pendingUsers := tx.Model(&model.AdoptionApplication{}).
-		Select("user_id").
-		Where("status = ?", string(constants.ApplicationPending))
+// ListWaitlistedForUpdate 按申请时间升序返回地块的全部候补申请（行锁）。
+// 合格性（候选人未持有待审核申请）由 service 在锁定候选人用户行后逐个复核，
+// 仅靠查询时的子查询过滤无法与并发的 Apply 串行化。
+func (r *adoptionApplicationRepository) ListWaitlistedForUpdate(tx *gorm.DB, plotID uint) ([]model.AdoptionApplication, error) {
+	var apps []model.AdoptionApplication
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("plot_id = ? AND status = ?", plotID, string(constants.ApplicationWaitlisted)).
-		Where("user_id NOT IN (?)", pendingUsers).
 		Order("created_at ASC, id ASC").
-		First(&a).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	return &a, nil
+		Find(&apps).Error
+	return apps, err
 }
 
 // ListByUser 我的申请分页列表（进度查询）。

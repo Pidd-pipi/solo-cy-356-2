@@ -29,7 +29,7 @@ docker compose up -d --build
 ## ✨ 主要功能
 
 1. **地块认养与 GIS 展示**：地图展示地块分布，标注空闲/已认养/待释放状态，展示面积、土壤类型、日照条件，在线认养。
-2. **地块认养申请审核流**：居民申请空闲地块（同一居民在同一地块仅允许一份进行中申请，同一时间仅允许一份待审核申请；候补中的居民可继续申请其他空闲地块），地块已有待审申请时自动进入候补队列；支持撤回；管理员审核通过/驳回；通过后申请与地块状态同事务同步（地块被认养只能经由申请审核通过，无直接认养入口）；驳回、撤回或地块释放后按申请时间将最早合格候补申请转为待审核（跳过已持有待审核申请的居民）。
+2. **地块认养申请审核流**：居民申请空闲地块（同一居民在同一地块仅允许一份进行中申请，同一时间仅允许一份待审核申请；候补中的居民可继续申请其他空闲地块），地块已有待审申请时自动进入候补队列；支持撤回；管理员审核通过/驳回；通过后申请与地块状态同事务同步（地块被认养只能经由申请审核通过，无直接认养入口）；驳回、撤回或地块释放后按申请时间将最早合格候补申请转为待审核（跳过已持有待审核申请的居民）。**并发控制**：申请/撤回/审核/释放在同一事务内按 申请行 → 地块行 → 用户行 的固定顺序 `SELECT ... FOR UPDATE` 加锁，申请与驳回/撤回/释放触发的候补晋升两两串行，晋升时在用户行锁内复核待审核数量，保证并发下同一居民也不会出现两份待审核申请（见 `service/adoption_application_service.go` 与 `scripts/e2e_concurrency.sh`）。
 3. **种植计划与作物推荐**：认养后制定种植计划，按季节推荐适宜作物，生成预期收获时间线（蔬菜 45 天/水果 90 天/香草 35 天）。
 4. **种植日记图文记录**：按播种/浇水/施肥/除虫/收成记录种植过程，支持点赞与评论。
 5. **收成预警与采摘提醒**：近 7 天成熟作物自动提醒，记录采摘重量与品质，生成年度收成统计报表。
@@ -282,6 +282,19 @@ curl -s -X POST http://localhost:29516/api/v1/applications/1/review \
 ```bash
 # 前置：后端已启动（Docker Compose 或本地运行），种子账号 admin/admin123 可用
 BASE=http://localhost:29516/api/v1 bash scripts/e2e_acceptance.sh
+```
+
+`scripts/e2e_concurrency.sh` 并发回归（申请 vs 驳回晋升 / 申请 vs 撤回晋升 / 并发双申请，每场景默认 30 轮并行请求，断言同一居民始终只有一份待审核申请）：
+
+```bash
+BASE=http://localhost:29516/api/v1 ROUNDS=30 bash scripts/e2e_concurrency.sh
+```
+
+另有 PostgreSQL 行锁级并发集成测试（真实 `SELECT ... FOR UPDATE`，默认跳过）：
+
+```bash
+PG_TEST_DSN="host=127.0.0.1 port=5432 user=communitygarden_user password=communitygarden_pwd dbname=communitygarden_it sslmode=disable" \
+  go test ./internal/service/ -run TestConcurrency -v -count=1
 ```
 
 ## 🐳 Docker 部署说明

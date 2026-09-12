@@ -65,7 +65,7 @@ func TestAdoptionApplicationRepository_Counts(t *testing.T) {
 	}
 }
 
-func TestAdoptionApplicationRepository_FindEarliestEligibleWaitlisted(t *testing.T) {
+func TestAdoptionApplicationRepository_ListWaitlistedForUpdate(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewAdoptionApplicationRepository(db)
 	u1 := seedUser(t, db, "wl-u1", "citizen")
@@ -78,16 +78,20 @@ func TestAdoptionApplicationRepository_FindEarliestEligibleWaitlisted(t *testing
 	// 手工构造更早/更晚的申请时间，验证按申请时间升序
 	later := seedApp(t, db, plot.ID, u2.ID, string(constants.ApplicationWaitlisted))
 	seedApp(t, db, plot.ID, u3.ID, string(constants.ApplicationPending))
+	seedApp(t, db, otherPlot.ID, u3.ID, string(constants.ApplicationWaitlisted))
 	db.Model(&model.AdoptionApplication{}).Where("id = ?", older.ID).Update("created_at", time.Now().Add(-2*time.Hour))
 	db.Model(&model.AdoptionApplication{}).Where("id = ?", later.ID).Update("created_at", time.Now().Add(-1*time.Hour))
 
 	err := db.Transaction(func(tx *gorm.DB) error {
-		got, err := repo.FindEarliestEligibleWaitlistedForUpdate(tx, plot.ID)
+		got, err := repo.ListWaitlistedForUpdate(tx, plot.ID)
 		if err != nil {
-			t.Fatalf("FindEarliestEligibleWaitlistedForUpdate: %v", err)
+			t.Fatalf("ListWaitlistedForUpdate: %v", err)
 		}
-		if got.ID != older.ID {
-			t.Errorf("earliest eligible waitlisted = id %d, want %d（最早申请时间）", got.ID, older.ID)
+		if len(got) != 2 {
+			t.Fatalf("waitlisted len=%d, want 2（仅本地块候补状态）", len(got))
+		}
+		if got[0].ID != older.ID || got[1].ID != later.ID {
+			t.Errorf("order = [%d %d], want [%d %d]（按申请时间升序）", got[0].ID, got[1].ID, older.ID, later.ID)
 		}
 		return nil
 	})
@@ -95,27 +99,15 @@ func TestAdoptionApplicationRepository_FindEarliestEligibleWaitlisted(t *testing
 		t.Fatalf("tx: %v", err)
 	}
 
-	// u1 在别的地块持有待审核申请后，其候补应被跳过，晋升 u2
-	seedApp(t, db, otherPlot.ID, u1.ID, string(constants.ApplicationPending))
-	err = db.Transaction(func(tx *gorm.DB) error {
-		got, err := repo.FindEarliestEligibleWaitlistedForUpdate(tx, plot.ID)
-		if err != nil {
-			t.Fatalf("FindEarliestEligibleWaitlistedForUpdate with pending holder: %v", err)
-		}
-		if got.ID != later.ID {
-			t.Errorf("earliest eligible waitlisted = id %d, want %d（跳过已有待审核申请的居民）", got.ID, later.ID)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("tx: %v", err)
-	}
-
-	// 无候补时返回 ErrNotFound
+	// 无候补时返回空列表
 	emptyPlot := seedPlotForApp(t, db, "P-REPO-3")
 	err = db.Transaction(func(tx *gorm.DB) error {
-		if _, err := repo.FindEarliestEligibleWaitlistedForUpdate(tx, emptyPlot.ID); err != ErrNotFound {
-			t.Errorf("want ErrNotFound, got %v", err)
+		got, err := repo.ListWaitlistedForUpdate(tx, emptyPlot.ID)
+		if err != nil {
+			t.Fatalf("ListWaitlistedForUpdate empty: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("waitlisted len=%d, want 0", len(got))
 		}
 		return nil
 	})
