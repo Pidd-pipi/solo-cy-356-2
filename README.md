@@ -284,17 +284,10 @@ curl -s -X POST http://localhost:29516/api/v1/applications/1/review \
 BASE=http://localhost:29516/api/v1 bash scripts/e2e_acceptance.sh
 ```
 
-`scripts/e2e_concurrency.sh` 并发回归（申请 vs 驳回晋升 / 申请 vs 撤回晋升 / 并发双申请，每场景默认 30 轮并行请求，断言同一居民始终只有一份待审核申请）：
+`scripts/e2e_concurrency.sh` 并发回归（申请 vs 驳回晋升 / 申请 vs 撤回晋升 / 并发双申请 / 申请 vs 释放晋升，每场景默认 30 轮并行请求，断言同一居民始终只有一份待审核申请）：
 
 ```bash
 BASE=http://localhost:29516/api/v1 ROUNDS=30 bash scripts/e2e_concurrency.sh
-```
-
-另有 PostgreSQL 行锁级并发集成测试（真实 `SELECT ... FOR UPDATE`，默认跳过）：
-
-```bash
-PG_TEST_DSN="host=127.0.0.1 port=5432 user=communitygarden_user password=communitygarden_pwd dbname=communitygarden_it sslmode=disable" \
-  go test ./internal/service/ -run TestConcurrency -v -count=1
 ```
 
 ## 🐳 Docker 部署说明
@@ -326,7 +319,21 @@ npm run dev                # http://localhost:5173，/api 代理到 29516
 cd backend
 go build ./...
 go vet ./...
-go test ./...              # service 与 repository 表驱动单元测试
+go test ./...              # service 与 repository 表驱动单元测试 + 并发/失败路径测试
+```
+
+认养申请的并发与失败路径测试（全部随 `go test ./...` 稳定执行，屏障并发、无固定等待）：
+
+| 测试文件 | 覆盖场景 |
+| --- | --- |
+| `service/adoption_application_concurrency_test.go` | 同一居民并发双申请、同一地块 4 人并发申请、申请 vs 驳回晋升、申请 vs 撤回晋升、申请 vs 释放晋升（单连接 SQLite 串行化，断言与交错顺序无关的最终状态） |
+| `service/adoption_application_failure_test.go` | 审核通过时第一步（申请写入）失败、第二步（地块写入）失败、地块已不可用三种失败路径的整体回滚（repository 接口注入写失败，断言接口报错 + 申请/地块数据库最终状态） |
+| `service/adoption_application_pg_test.go` | 以上并发场景的 PostgreSQL 真实行锁（`SELECT ... FOR UPDATE`）版本，`PG_TEST_DSN` 门控默认跳过 |
+
+```bash
+# PostgreSQL 行锁级并发集成测试（需一个专用测试库，会清空数据）
+PG_TEST_DSN="host=127.0.0.1 port=5432 user=communitygarden_user password=communitygarden_pwd dbname=communitygarden_it sslmode=disable" \
+  go test ./internal/service/ -run TestConcurrencyPG -v -count=1
 ```
 
 ## 📄 License

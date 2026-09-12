@@ -3,6 +3,7 @@
 # 场景1：居民申请新地块 与 其候补被驳回晋升 并发 -> 至多一份待审核
 # 场景2：居民申请新地块 与 其候补被撤回晋升 并发 -> 至多一份待审核
 # 场景3：同一居民并发申请两块空闲地块 -> 恰好一份待审核
+# 场景4：居民申请新地块 与 地块释放触发晋升 并发 -> 至多一份待审核
 # 前置：后端已启动（默认 http://localhost:29516），种子账号 admin/admin123 可用。
 # 用法：BASE=http://localhost:29516/api/v1 ROUNDS=30 bash scripts/e2e_concurrency.sh
 set -euo pipefail
@@ -80,6 +81,30 @@ for i in $(seq 1 "$ROUNDS"); do
   rm -f /tmp/cc3_a_$i.json /tmp/cc3_b_$i.json
 done
 if [ "$S3_FAIL" -eq 0 ]; then PASS=$((PASS+1)); echo "  ✔ 场景3（并发双申请）$ROUNDS 轮全部恰好一份待审核"; else FAIL=$((FAIL+1)); echo "  ✘ 场景3 失败 $S3_FAIL 轮"; fi
+
+echo "== 并发场景 4：申请新地块 与 地块释放触发晋升 并发（$ROUNDS 轮） =="
+S4_FAIL=0
+for i in $(seq 1 "$ROUNDS"); do
+  register "cc4-x-$RUN-$i"; register "cc4-u-$RUN-$i"
+  TX4=$(login "cc4-x-$RUN-$i" pass123); TU4=$(login "cc4-u-$RUN-$i" pass123)
+  PA4=$(mkplot "CC4A-$RUN-$i"); PB4=$(mkplot "CC4B-$RUN-$i")
+  # x 申请 A 并被通过认养；u 在 A 候补；x 的计划完成后 A 进入待释放
+  APP_X4=$(api POST /applications "$TX4" "{\"plot_id\":$PA4}" | jqr .data.id)
+  api POST /applications "$TU4" "{\"plot_id\":$PA4}" > /dev/null
+  api POST "/applications/$APP_X4/review" "$ADMIN" '{"action":"approve"}' > /dev/null
+  PLAN4=$(api POST /planting-plans "$TX4" "{\"plot_id\":$PA4,\"crop_name\":\"菠菜\",\"crop_type\":\"vegetable\",\"season\":\"spring\"}" | jqr .data.id)
+  for s in planting growing harvesting completed; do
+    api POST "/planting-plans/$PLAN4/status" "$TX4" "{\"status\":\"$s\"}" > /dev/null
+  done
+  # 并发：u 申请 B 地块 + x 释放 A 地块（晋升 u 的候补）
+  api POST /applications "$TU4" "{\"plot_id\":$PB4}" > /tmp/cc4_apply_$i.json &
+  api POST "/plots/$PA4/release" "$TX4" > /tmp/cc4_release_$i.json &
+  wait
+  CNT4=$(pending_count "$TU4")
+  if [ "$CNT4" -gt 1 ]; then S4_FAIL=$((S4_FAIL+1)); echo "  ✘ 场景4 第 $i 轮：用户出现 $CNT4 份待审核"; fi
+  rm -f /tmp/cc4_apply_$i.json /tmp/cc4_release_$i.json
+done
+if [ "$S4_FAIL" -eq 0 ]; then PASS=$((PASS+1)); echo "  ✔ 场景4（申请 vs 释放晋升）$ROUNDS 轮全部保持唯一待审核"; else FAIL=$((FAIL+1)); echo "  ✘ 场景4 失败 $S4_FAIL 轮"; fi
 
 echo ""
 echo "=========================================="

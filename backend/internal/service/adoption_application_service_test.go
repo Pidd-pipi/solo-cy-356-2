@@ -228,33 +228,6 @@ func TestApplicationService_ReviewApproveSyncsPlot(t *testing.T) {
 	}
 }
 
-func TestApplicationService_ReviewApproveRollbackWhenPlotUnavailable(t *testing.T) {
-	db := newTestServiceDB(t)
-	svc, _ := newAppServices(t, db)
-	admin := newTestUser(t, db, "rb-admin", "admin")
-	applicant := newTestUser(t, db, "rb-u1", "citizen")
-	owner := newTestUser(t, db, "rb-owner", "farmer")
-	plot := newTestPlot(t, db, "P-RB", "available", nil)
-	app := seedApplication(t, db, plot.ID, applicant.ID, string(constants.ApplicationPending))
-
-	// 申请提交后地块被他人直接认养：审核通过必须失败且申请保持待审核（回滚）
-	plot.Status = string(constants.PlotStatusAdopted)
-	plot.AdopterID = &owner.ID
-	if err := db.Save(plot).Error; err != nil {
-		t.Fatalf("update plot: %v", err)
-	}
-	if _, err := svc.Review(app.ID, admin.ID, "rb-admin", &dto.ReviewApplicationRequest{Action: "approve"}); err == nil {
-		t.Fatalf("expected approve to fail when plot not available")
-	}
-	var reloaded model.AdoptionApplication
-	if err := db.First(&reloaded, app.ID).Error; err != nil {
-		t.Fatalf("reload application: %v", err)
-	}
-	if reloaded.Status != string(constants.ApplicationPending) {
-		t.Errorf("application status=%s after rollback, want pending", reloaded.Status)
-	}
-}
-
 func TestApplicationService_ReviewRejectPromotesWaitlisted(t *testing.T) {
 	db := newTestServiceDB(t)
 	svc, _ := newAppServices(t, db)
